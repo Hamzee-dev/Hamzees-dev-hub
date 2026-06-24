@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hamzee's Dev Hub</title>
+    <style>
+        /* Modern CSS Reset & Variable Setup */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #09090b; /* Deep rich dark background */
+            color: #f4f4f5;
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 60px 20px;
+        }
+
+        /* Profile/Header Section */
+        header {
+            text-align: center;
+            margin-bottom: 50px;
+            max-width: 600px;
+        }
+
+        header h1 {
+            font-size: 2.8rem;
+            font-weight: 800;
+            background: linear-gradient(to right, #f1c40f, #2ecc71);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 12px;
+            letter-spacing: -0.5px;
+        }
+
+        header p {
+            color: #a1a1aa;
+            font-size: 1.1rem;
+            line-height: 1.6;
+        }
+
+        /* Dashboard Project Grid */
+        .project-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            width: 100%;
+            max-width: 850px;
+        }
+
+        /* Seamless Interactive Cards */
+        .project-card {
+            background-color: #18181b;
+            border: 1px solid #27272a;
+            border-radius: 16px;
+            padding: 24px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 180px;
+            cursor: pointer;
+        }
+
+        /* Card Hover States */
+        .project-card:hover {
+            transform: translateY(-6px);
+            border-color: #3f3f46;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4), 0 0 15px rgba(241, 196, 15, 0.05);
+        }
+
+        .project-card h3 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .project-card p {
+            color: #9a9a1e; /* Shifting flavor text to an earthy tone */
+            color: #a1a1aa;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        .card-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 15px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Unique tag accents per project type */
+        .tag-python { color: #3498db; }
+        .tag-web { color: #2ecc71; }
+        .action-text { color: #f1c40f; opacity: 0; transition: opacity 0.2s ease; }
+        
+        .project-card:hover .action-text {
+            opacity: 1;
+        }
+
+        /* Footer styling */
+        footer {
+            margin-top: auto;
+            padding-top: 60px;
+            color: #52525b;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Hamzee's Workspace</h1>
+        <p>A central dashboard housing active builds, software prototypes, and browser-native video games.</p>
+    </header>
+
+    <div class="project-grid">
+        
+        <a href="https://github.com" target="_blank" style="text-decoration: none;">
+            <div class="project-card">
+                <div>
+                    <h3>⏱️ Desktop Clock App</h3>
+                    <p>A Python-powered local GUI clock utilizing Tkinter logic loops and active live threading.</p>
+                </div>
+                <div class="card-footer">
+                    <span class="tag-python">Python / Tkinter</span>
+                    <span class="action-text">View Source →</span>
+                </div>
+            </div>
+        </a>
+
+        <a href="game.html" style="text-decoration: none;">
+            <div class="project-card" style="position: relative;">
+                <div>
+                    <h3>🪙 Coin Clicker 2.0</h3>
+                    <p>An incremental idle economy game built with local save systems and timestamped offline progress engines.</p>
+                </div>
+                <div class="card-footer">
+                    <span class="tag-web">HTML / CSS / JS</span>
+                    <span class="action-text">Play Game →</span>
+                </div>
+            </div>
+        </a>
+        <a href="wordgame.html" style="text-decoration: none;">
+           <div class="project-card">
+              <div>
+                 <h3>🧩 Word Cipher</h3>
+                 <p>A logic puzzle game checking arrays and tracking string splits to reveal hidden system terms.</p>
+             </div>
+             <div class="card-footer">
+                    <span class="tag-python" style="color: #3498db;">HTML / JS Logic</span>
+                    <span class="action-text">Crack Code →</span>
+             </div>
+          </div>
+        </a>
+        <a href="rpg.html" style="text-decoration: none;">
+            <div class="project-card">
+               <div>
+                  <h3>⚔️ Realm Battler</h3>
+                  <p>A turn-based mini-RPG using state mutation algorithms, custom random drops, and local save scaling.</p>
+              </div>
+              <div class="card-footer">
+                    <span class="tag-web" style="color: #2ecc71;">HTML / JS States</span>
+                    <span class="action-text">Enter Dungeon →</span>
+              </div>
+           </div>
+       </a>
+       <a href="runner.html" style="text-decoration: none;">
+           <div class="project-card">
+               <div>
+                  <h3>🏃 Retro Dash</h3>
+                  <p>A canvas physics engine simulating gravity weight grids, boundary box collision checking, and speed scaling.</p>
+               </div>
+               <div class="card-footer">
+                   <span class="tag-web" style="color: #e74c3c;">HTML / Canvas loop</span>
+                   <span class="action-text">Start Dash →</span>
+               </div>
+          </div>
+        </a>
+        <a href="maze.html" style="text-decoration: none;">
+            <div class= "project-card">
+                <div>
+                    <h3>a Maze :D</h3>
+                    <p>a super cool find your way out maze</p>
+                </div>
+                <div class="card-footer" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <span class="tag-web" style="color: red;"> HTML / CSS </span>
+                    <span class="action-text">start playing →</span>
+               </div>
+            </div>
+        </a>
+        <a href="piano tiles.html" style="text-decoration: none;">
+            <div class="project-card">
+                <div>
+                    <h3>Piano tiles :D</h3>
+                    <p>A fast-paced rhythm arcade game testing your reflexes and timing with precision key taps, speed scaling, and high-score tracking.</p>
+                </div>
+                <div class="card-footer" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <span class="tag-web" style="color: #f4f4f5;">HTML / CSS / JAVA</span>
+                    <span class="action-text">test your reflexes 😈→</span>
+                </div>
+            </div>
+        </a>
+        <a href="zombie.html" style="text-decoration: none;">
+            <div class="project-card">
+                <div>
+                    <h3>survive zombies</h3>
+                    <p>Top-down survival arena. Move with WASD, aim with your mouse, and shred incoming hostile vectors before you get overrun.</p>
+                </div>
+                <div class="card-footer" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <span class="tag-web" style="color: #f4f4f5;"> HTML / CSS</span>
+                    <span class="action-text"> try to survive the longest→</span>
+                </div>
+            </div>
+        </a>
+
+    </div>
+
+    <footer>
+        &copy; 2026 Hamzee. Hand-coded inside VS Code.
+    </footer>
+
+</body>
+</html>

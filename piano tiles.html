@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Neon Rhythm: Custom Audio Engine</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #05050a;
+            color: #fff;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        h1 {
+            color: #00f0ff;
+            margin: 5px 0;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            text-shadow: 0 0 15px rgba(0, 240, 255, 0.5);
+        }
+        .controls-hint {
+            font-size: 0.9rem;
+            color: #4b5563;
+            margin-bottom: 15px;
+            letter-spacing: 2px;
+        }
+        #game-container {
+            position: relative;
+            background: #0d0d16;
+            border: 3px solid #1f2937;
+            border-radius: 12px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+        }
+        canvas {
+            display: block;
+            border-radius: 9px;
+        }
+        .ui-layer {
+            position: absolute;
+            top: 15px;
+            width: 100%;
+            display: flex;
+            justify-content: space-around;
+            font-weight: 900;
+            pointer-events: none;
+            font-size: 1.5rem;
+        }
+        #score-display { color: #ffcc00; text-shadow: 0 2px 10px rgba(255,204,0,0.4); font-size: 2.2rem; }
+        #best-display { color: #00f0ff; text-shadow: 0 2px 10px rgba(0,240,255,0.4); }
+        
+        #judgment-pop {
+            position: absolute;
+            top: 40%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.8);
+            font-size: 2.5rem;
+            font-weight: 900;
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.08s ease-out;
+        }
+        #judgment-pop.pop {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1.15);
+        }
+
+        #menu-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(5, 5, 10, 0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+            opacity: 1;
+            transition: opacity 0.3s ease;
+            text-align: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        #menu-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        .btn {
+            background: #00f0ff;
+            color: #05050a;
+            border: none;
+            padding: 14px 40px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.4);
+            transition: transform 0.1s, background 0.2s;
+            margin-top: 15px;
+        }
+        .btn:hover { background: #33f3ff; transform: scale(1.05); }
+        .btn:disabled { background: #1f2937; color: #4b5563; box-shadow: none; cursor: not-allowed; }
+        
+        #game-status { font-size: 1.8rem; color: #00f0ff; margin-bottom: 5px; font-weight: 800; letter-spacing: 1px; }
+        #final-stats { color: #9ca3af; margin-bottom: 15px; font-size: 1rem; }
+        
+        /* Audio Input styling */
+        .file-label {
+            background: #1f2937;
+            padding: 10px 20px;
+            border-radius: 6px;
+            border: 1px dashed #4b5563;
+            cursor: pointer;
+            display: inline-block;
+            margin-top: 10px;
+            font-size: 0.9rem;
+            transition: border-color 0.2s;
+        }
+        .file-label:hover { border-color: #00f0ff; }
+        #audio-upload { display: none; }
+    </style>
+</head>
+<body>
+
+    <h1>Neon Rhythm</h1>
+    <div class="controls-hint">KEYS: [ D ] [ F ] [ J ] [ K ]</div>
+
+    <div id="game-container">
+        <div class="ui-layer">
+            <div id="score-display">0</div>
+            <div id="best-display">🏆 0</div>
+        </div>
+        <div id="judgment-pop">PERFECT</div>
+        <canvas id="pianoCanvas" width="360" height="600"></canvas>
+        
+        <div id="menu-overlay">
+            <div id="game-status">LOAD YOUR SONG</div>
+            <div id="final-stats">Upload any MP3 file to generate tiles automatically</div>
+            
+            <label class="file-label" for="audio-upload">
+                🎵 Choose Audio File...
+            </label>
+            <input type="file" id="audio-upload" accept="audio/*">
+            <div id="file-name-display" style="margin-top: 10px; font-size:0.85rem; color:#a1a1aa;"></div>
+            
+            <button class="btn" id="start-btn" onclick="startGame()" disabled>START TRACK</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('pianoCanvas');
+        const ctx = canvas.getContext('2d');
+        const menuOverlay = document.getElementById('menu-overlay');
+        const scoreDisplay = document.getElementById('score-display');
+        const bestDisplay = document.getElementById('best-display');
+        const judgmentPop = document.getElementById('judgment-pop');
+        const finalStats = document.getElementById('final-stats');
+        const audioUpload = document.getElementById('audio-upload');
+        const startBtn = document.getElementById('start-btn');
+        const fileNameDisplay = document.getElementById('file-name-display');
+
+        // --- GAME SYSTEM SETTINGS ---
+        const LANES_COUNT = 4;
+        const LANE_WIDTH = canvas.width / LANES_COUNT;
+        const TILE_HEIGHT = 135;
+        const TARGET_ZONE_Y = canvas.height - 90; 
+
+        let tiles = [];
+        let score = 0;
+        let runningSpeed = 4.5; 
+        let gameActive = false;
+        let lastSpawnTime = 0;
+
+        const LANE_KEYS = { 'd': 0, 'f': 1, 'j': 2, 'k': 3 };
+        const LANE_COLORS = ['#ff003c', '#9333ea', '#2563eb', '#16a34a'];
+        let activeFlashingLanes = [false, false, false, false];
+
+        // Persistent High Score Engine
+        let highScore = localStorage.getItem('mp3_high_score') || 0;
+        bestDisplay.innerText = "🏆 " + highScore;
+
+        // --- REAL TIME AUDIO FREQUENCY ANALYZER OBJECTS ---
+        let audioContext = null;
+        let audioSource = null;
+        let analyser = null;
+        let audioTrack = new Audio();
+        let frequencyData = null;
+
+        // Watch file inputs to enable play loop buttons safely
+        audioUpload.addEventListener('change', function(e) {
+            if (this.files && this.files[0]) {
+                const file = this.files[0];
+                audioTrack.src = URL.createObjectURL(file);
+                fileNameDisplay.innerText = "Loaded: " + file.name.substring(0, 30) + "...";
+                startBtn.disabled = false;
+            }
+        });
+
+        function setupAudioAnalysis() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 64; // Small spectrum layout for quick bass calculation loops
+                audioSource = audioContext.createMediaElementSource(audioTrack);
+                audioSource.connect(analyser);
+                analyser.connect(audioContext.destination);
+                frequencyData = new Uint8Array(analyser.frequencyBinCount);
+            }
+        }
+
+        function triggerTextPop(text, color) {
+            judgmentPop.innerText = text;
+            judgmentPop.style.color = color;
+            judgmentPop.style.textShadow = `0 0 15px ${color}`;
+            judgmentPop.classList.add('pop');
+            setTimeout(() => judgmentPop.classList.remove('pop'), 120);
+        }
+
+        // --- RUNTIME PLAYER INPUTS ---
+        window.addEventListener('keydown', (e) => {
+            if (!gameActive) return;
+            
+            const key = e.key.toLowerCase();
+            if (key in LANE_KEYS) {
+                const targetLane = LANE_KEYS[key];
+                activeFlashingLanes[targetLane] = true;
+                setTimeout(() => activeFlashingLanes[targetLane] = false, 80);
+
+                let hitSuccess = false;
+                for (let i = 0; i < tiles.length; i++) {
+                    let tile = tiles[i];
+                    if (tile.lane === targetLane && !tile.hit) {
+                        let bottomOfTile = tile.y + TILE_HEIGHT;
+                        
+                        if (bottomOfTile >= TARGET_ZONE_Y - 75 && tile.y <= canvas.height) {
+                            tile.hit = true;
+                            hitSuccess = true;
+
+                            let alignmentOffset = Math.abs(bottomOfTile - TARGET_ZONE_Y);
+                            let isPerfect = alignmentOffset <= 25;
+
+                            if (isPerfect) {
+                                score += 2;
+                                triggerTextPop("PERFECT x2", "#00f0ff");
+                            } else {
+                                score += 1;
+                                triggerTextPop("GREAT", "#9333ea");
+                            }
+
+                            scoreDisplay.innerText = score;
+                            break;
+                        }
+                    }
+                }
+
+                if (!hitSuccess) endGame("MISSED TAP!");
+            }
+        });
+
+        // --- BASS PULSE GENERATOR ALGORITHM ---
+        function analyzeSongBeats() {
+            if (!gameActive || !analyser) return;
+
+            analyser.getByteFrequencyData(frequencyData);
+            
+            // Sub-bass lines live inside the absolute lowest array brackets [0 to 2]
+            let bassEnergyValue = (frequencyData[0] + frequencyData[1] + frequencyData[2]) / 3;
+            let currentTime = Date.now();
+
+            // Spawns structural tile if sound amplitude exceeds baseline thresholds
+            if (bassEnergyValue > 195 && (currentTime - lastSpawnTime > 320)) {
+                const randomLane = Math.floor(Math.random() * LANES_COUNT);
+                tiles.push({
+                    lane: randomLane,
+                    y: -TILE_HEIGHT,
+                    hit: false
+                });
+                lastSpawnTime = currentTime;
+            }
+        }
+
+        // --- MAIN WORKER ENGINE LOOPS ---
+        function update() {
+            if (!gameActive) return;
+
+            analyzeSongBeats();
+
+            for (let i = tiles.length - 1; i >= 0; i--) {
+                let tile = tiles[i];
+                tile.y += runningSpeed;
+
+                if (tile.y > canvas.height) {
+                    if (!tile.hit) {
+                        endGame("TILE DROPPED!");
+                        return;
+                    }
+                    tiles.splice(i, 1);
+                }
+            }
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Lanes Vertical Grid
+            for (let i = 0; i < LANES_COUNT; i++) {
+                ctx.strokeStyle = '#1f2937';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.moveTo(i * LANE_WIDTH, 0); ctx.lineTo(i * LANE_WIDTH, canvas.height); ctx.stroke();
+
+                ctx.fillStyle = '#4b5563';
+                ctx.font = 'bold 14px Segoe UI';
+                ctx.fillText(Object.keys(LANE_KEYS)[i].toUpperCase(), i * LANE_WIDTH + (LANE_WIDTH/2 - 5), canvas.height - 15);
+
+                if (activeFlashingLanes[i]) {
+                    ctx.fillStyle = 'rgba(0, 240, 255, 0.05)';
+                    ctx.fillRect(i * LANE_WIDTH, 0, LANE_WIDTH, canvas.height);
+                }
+            }
+
+            // Target Baseline Hit Line Area
+            ctx.strokeStyle = '#00f0ff';
+            ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.moveTo(0, TARGET_ZONE_Y); ctx.lineTo(canvas.width, TARGET_ZONE_Y); ctx.stroke();
+
+            // Draw Note Blocks
+            tiles.forEach(tile => {
+                if (tile.hit) return;
+                ctx.fillStyle = '#111122';
+                ctx.fillRect(tile.lane * LANE_WIDTH + 4, tile.y, LANE_WIDTH - 8, TILE_HEIGHT);
+
+                ctx.strokeStyle = LANE_COLORS[tile.lane];
+                ctx.lineWidth = 3;
+                ctx.strokeRect(tile.lane * LANE_WIDTH + 4, tile.y, LANE_WIDTH - 8, TILE_HEIGHT);
+            });
+        }
+
+        function gameTick() {
+            update();
+            render();
+            if (gameActive) requestAnimationFrame(gameTick);
+        }
+
+        // --- SYSTEM STATES MANAGEMENT ---
+        function startGame() {
+            setupAudioAnalysis();
+            tiles = [];
+            score = 0;
+            lastSpawnTime = Date.now();
+            scoreDisplay.innerText = "0";
+            menuOverlay.classList.add('hidden');
+            gameActive = true;
+            
+            // Fires up audio track engine cleanly
+            audioTrack.currentTime = 0;
+            audioTrack.play();
+            
+            gameTick();
+        }
+
+        function endGame(reasonMessage) {
+            gameActive = false;
+            audioTrack.pause();
+
+            let recordMsg = "";
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('mp3_high_score', highScore);
+                bestDisplay.innerText = "🏆 " + highScore;
+                recordMsg = "<br><span style='color: #ffcc00; font-weight:bold;'>⭐ NEW MP3 RECORD HIGH SCORE! ⭐</span>";
+            }
+
+            document.getElementById('game-status').innerText = reasonMessage;
+            finalStats.innerHTML = `Custom Session Score: <b>${score}</b>${recordMsg}`;
+            menuOverlay.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>

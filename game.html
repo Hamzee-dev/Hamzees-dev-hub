@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Hamzee's Clicker</title>
+    <style>
+        body {
+            background-color: #0f0f11;
+            color: #e4e4e7;
+            font-family: 'Segoe UI', sans-serif;
+            text-align: center;
+            padding-top: 40px;
+            overflow-x: hidden;
+        }
+        h1 {
+            color: #f1c40f;
+            font-size: 3rem;
+            margin-bottom: 5px;
+            text-shadow: 0 0 15px rgba(241, 196, 15, 0.3);
+        }
+        .score-text {
+            font-size: 1.8rem;
+            color: #ffffff;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .cps-text {
+            font-size: 1rem;
+            color: #a1a1aa;
+            margin-bottom: 25px;
+        }
+
+        /* The Coin Styling */
+        .coin-btn {
+            background: radial-gradient(circle, #f39c12, #f1c40f);
+            width: 160px;
+            height: 160px;
+            border-radius: 50%;
+            border: 8px solid #d35400;
+            cursor: pointer;
+            box-shadow: 0 0 30px rgba(241, 196, 15, 0.5), inset 0 0 15px rgba(255,255,255,0.6);
+            outline: none;
+            transition: transform 0.05s ease-in-out;
+            margin-bottom: 20px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        .coin-btn:hover {
+            transform: scale(1.03);
+            box-shadow: 0 0 40px rgba(241, 196, 15, 0.7);
+        }
+        .coin-btn:active {
+            transform: scale(0.92);
+        }
+        .coin-inner {
+            font-size: 4rem;
+            user-select: none;
+        }
+
+        /* Utility System Buttons */
+        .system-btn {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-bottom: 30px;
+            font-size: 0.85rem;
+            transition: background-color 0.2s;
+        }
+        .system-btn:hover { background-color: #c0392b; }
+
+        /* FLOATING TEXT ANIMATION STYLE */
+        .floating-number {
+            position: absolute;
+            color: #2ecc71;
+            font-size: 1.5rem;
+            font-weight: bold;
+            pointer-events: none;
+            user-select: none;
+            animation: floatUpAndFade 0.8s ease-out forwards;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+
+        @keyframes floatUpAndFade {
+            0% { opacity: 1; transform: translate(-50%, -50%) translateY(0) scale(1); }
+            100% { opacity: 0; transform: translate(-50%, -50%) translateY(-100px) scale(1.2); }
+        }
+
+        /* Upgrades Board Layout */
+        .upgrades-board {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .shop-container {
+            background-color: #18181b;
+            flex: 1;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid #27272a;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .upgrade-btn {
+            background-color: #2ecc71;
+            color: white;
+            border: none;
+            padding: 12px 10px;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            margin-top: 15px;
+            width: 100%;
+        }
+        .upgrade-btn.blue { background-color: #3498db; }
+        .upgrade-btn.purple { background-color: #9b59b6; }
+        .upgrade-btn:hover { filter: brightness(1.1); }
+        .upgrade-btn:disabled {
+            background-color: #3f3f46;
+            cursor: not-allowed;
+            color: #71717a;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Hamzee's Coin Clicker</h1>
+    <div class="score-text">💰 <span id="score">0</span></div>
+    <div class="cps-text">Auto-Miners tick every <span id="speed-display">1.00</span> seconds</div>
+
+    <button class="coin-btn" onclick="increaseScore(event)">
+        <span class="coin-inner">🪙</span>
+    </button>
+    <br>
+    
+    <button class="system-btn" onclick="resetGame()">🚨 Reset Progress</button>
+
+    <div class="upgrades-board">
+        <div class="shop-container">
+            <div>
+                <h3>🔨 Click Upgrades</h3>
+                <p>Power: +<span id="per-click">1</span> per click</p>
+            </div>
+            <button class="upgrade-btn blue" id="miner-btn" onclick="buyMiner()">Upgrade Click<br>(Cost: 15)</button>
+        </div>
+
+        <div class="shop-container">
+            <div>
+                <h3>🤖 Auto-Miners</h3>
+                <p>Workers: <span id="auto-count">0</span> hired</p>
+            </div>
+            <button class="upgrade-btn" id="auto-btn" onclick="buyAuto()">Buy Worker<br>(Cost: 50)</button>
+        </div>
+
+        <div class="shop-container">
+            <div>
+                <h3>⚡ Overdrive Boost</h3>
+                <p>Level: <span id="speed-level">0</span></p>
+            </div>
+            <button class="upgrade-btn purple" id="speed-btn" onclick="buySpeed()">Boost Speed<br>(Cost: 150)</button>
+        </div>
+    </div>
+
+    <script>
+        let count = 0;
+        let coinsPerClick = 1;
+        let minerCost = 15;
+        let autoMiners = 0;
+        let autoCost = 50;
+        let autoIntervalSpeed = 1000;
+        let speedLevel = 0;
+        let speedCost = 150;
+        const maxSpeedLevel = 15;
+
+        // --- SAVE SYSTEM WITH TIMESTAMP LOGGING ---
+
+        function saveGame() {
+            localStorage.setItem("hamzee_coins", count);
+            localStorage.setItem("hamzee_perClick", coinsPerClick);
+            localStorage.setItem("hamzee_minerCost", minerCost);
+            localStorage.setItem("hamzee_autoMiners", autoMiners);
+            localStorage.setItem("hamzee_autoCost", autoCost);
+            localStorage.setItem("hamzee_speed", autoIntervalSpeed);
+            localStorage.setItem("hamzee_speedLevel", speedLevel);
+            localStorage.setItem("hamzee_speedCost", speedCost);
+            
+            // Log the exact millisecond time right now
+            localStorage.setItem("hamzee_lastTime", Date.now());
+        }
+
+        function loadGame() {
+            if (localStorage.getItem("hamzee_coins") !== null) {
+                count = parseInt(localStorage.getItem("hamzee_coins"));
+                coinsPerClick = parseInt(localStorage.getItem("hamzee_perClick"));
+                minerCost = parseInt(localStorage.getItem("hamzee_minerCost"));
+                autoMiners = parseInt(localStorage.getItem("hamzee_autoMiners"));
+                autoCost = parseInt(localStorage.getItem("hamzee_autoCost"));
+                autoIntervalSpeed = parseInt(localStorage.getItem("hamzee_speed"));
+                speedLevel = parseInt(localStorage.getItem("hamzee_speedLevel"));
+                speedCost = parseInt(localStorage.getItem("hamzee_speedCost"));
+
+                // --- CALCULATING OFFLINE EARNINGS ---
+                if (autoMiners > 0) {
+                    let lastSavedTime = parseInt(localStorage.getItem("hamzee_lastTime"));
+                    let currentTime = Date.now();
+                    
+                    // Math: Total time away in milliseconds
+                    let timePassed = currentTime - lastSavedTime; 
+                    
+                    // Convert that time into how many total auto-ticks occurred while gone
+                    let totalTicksPassed = Math.floor(timePassed / autoIntervalSpeed);
+
+                    if (totalTicksPassed > 0) {
+                        let offlineCoinsEarned = totalTicksPassed * autoMiners;
+                        count += offlineCoinsEarned;
+                        
+                        // Alert the user about their sweet loot
+                        alert("While your ass was out, your slaves generated " + offlineCoinsEarned + " coins!");
+                    }
+                }
+            }
+        }
+
+        function resetGame() {
+            localStorage.clear();
+            location.reload();
+        }
+
+        // --- CORE LOGIC ---
+
+        function increaseScore(event) {
+            count += coinsPerClick;
+            createFloatingNumber(event, "+" + coinsPerClick);
+            updateDisplay();
+            saveGame();
+        }
+
+        function createFloatingNumber(event, text) {
+            const floatingText = document.createElement("div");
+            floatingText.classList.add("floating-number");
+            floatingText.innerText = text;
+            floatingText.style.left = event.pageX + "px";
+            floatingText.style.top = event.pageY + "px";
+            document.body.appendChild(floatingText);
+            setTimeout(() => { floatingText.remove(); }, 800);
+        }
+
+        function buyMiner() {
+            if (count >= minerCost) {
+                count -= minerCost;
+                coinsPerClick += 1;
+                minerCost = Math.round(minerCost * 1.5);
+                updateDisplay();
+                saveGame();
+            }
+        }
+
+        function buyAuto() {
+            if (count >= autoCost) {
+                count -= autoCost;
+                autoMiners += 1;
+                autoCost = Math.round(autoCost * 1.6);
+                updateDisplay();
+                saveGame();
+            }
+        }
+
+        function buySpeed() {
+            if (count >= speedCost && speedLevel < maxSpeedLevel) {
+                count -= speedCost;
+                speedLevel += 1;
+                autoIntervalSpeed = Math.round(autoIntervalSpeed * 0.9); 
+                speedCost = Math.round(speedCost * 2.2);
+                updateDisplay();
+                saveGame();
+            }
+        }
+
+        function updateDisplay() {
+            document.getElementById("score").innerText = count;
+            document.getElementById("per-click").innerText = coinsPerClick;
+            document.getElementById("auto-count").innerText = autoMiners;
+            document.getElementById("speed-level").innerText = speedLevel;
+            document.getElementById("speed-display").innerText = (autoIntervalSpeed / 1000).toFixed(2);
+            
+            document.getElementById("miner-btn").innerHTML = "Upgrade Click<br>(Cost: " + minerCost + ")";
+            document.getElementById("auto-btn").innerHTML = "Buy Worker<br>(Cost: " + autoCost + ")";
+            
+            if (speedLevel >= maxSpeedLevel) {
+                document.getElementById("speed-btn").innerHTML = "MAXED OUT";
+            } else {
+                document.getElementById("speed-btn").innerHTML = "Boost Speed<br>(Cost: " + speedCost + ")";
+            }
+            
+            document.getElementById("miner-btn").disabled = (count < minerCost);
+            document.getElementById("auto-btn").disabled = (count < autoCost);
+            document.getElementById("speed-btn").disabled = (count < speedCost || speedLevel >= maxSpeedLevel);
+        }
+
+        function gameLoop() {
+            if (autoMiners > 0) {
+                count += autoMiners;
+                updateDisplay();
+                saveGame();
+            }
+            setTimeout(gameLoop, autoIntervalSpeed);
+        }
+
+        loadGame();
+        updateDisplay();
+        setTimeout(gameLoop, autoIntervalSpeed);
+    </script>
+
+</body>
+</html>

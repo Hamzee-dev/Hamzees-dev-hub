@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Subway Surfer: 3D Perspective Edition</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0c0c14;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            overflow: hidden;
+            color: #fff;
+        }
+        #game-container {
+            position: relative;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.7);
+            border-radius: 16px;
+            overflow: hidden;
+            border: 2px solid #27273a;
+        }
+        canvas {
+            display: block;
+            background: linear-gradient(to bottom, #111126 0%, #1f1f3a 40%, #0c0c14 100%);
+        }
+        #ui-layer {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+        }
+        .hud-text {
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+        }
+        #score { color: #00f0ff; }
+        #speed { color: #ff0077; }
+        #game-over-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(12, 12, 20, 0.85);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        #game-over-screen.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        h1 {
+            color: #ff0055;
+            font-size: 48px;
+            margin-bottom: 10px;
+            text-shadow: 0 0 20px rgba(255,0,85,0.4);
+        }
+        p {
+            font-size: 18px;
+            color: #a5a5b4;
+            margin-bottom: 25px;
+        }
+        .btn {
+            background: #00f0ff;
+            color: #0c0c14;
+            border: none;
+            padding: 12px 30px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.1s, background-color 0.2s;
+        }
+        .btn:hover { background: #33f3ff; transform: scale(1.05); }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="ui-layer">
+            <div class="hud-text">SCORE: <span id="score">0</span></div>
+            <div class="hud-text">SPEED: <span id="speed">1x</span></div>
+        </div>
+
+        <canvas id="gameCanvas" width="480" height="640"></canvas>
+
+        <div id="game-over-screen" id="gameOverMenu">
+            <h1>CRASHED!</h1>
+            <p>Watch out for oncoming subway barricades.</p>
+            <button class="btn" onclick="resetGame()">Run Again</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const gameOverScreen = document.getElementById('game-over-screen');
+
+        // --- GAME PARAMETERS ---
+        const WIDTH = canvas.width;
+        const HEIGHT = canvas.height;
+        const VANISHING_Y = HEIGHT * 0.35; // Point where tracks merge on the horizon
+        const HORIZON_Y = HEIGHT * 0.4;
+
+        let currentLane = 1; // 0 = Left, 1 = Center, 2 = Right
+        let targetX = WIDTH / 2;
+        let playerX = WIDTH / 2;
+        let playerY = 0;
+        let playerJumpV = 0;
+        let isJumping = false;
+
+        let score = 0;
+        let gameSpeed = 4;
+        let isGameOver = false;
+        let obstacles = [];
+        let environmentStep = 0;
+
+        // --- KEY LISTENERS ---
+        window.addEventListener('keydown', (e) => {
+            if (isGameOver) return;
+            
+            if ((e.key === 'ArrowLeft' || e.key === 'a') && currentLane > 0) {
+                currentLane--;
+            }
+            if ((e.key === 'ArrowRight' || e.key === 'd') && currentLane < 2) {
+                currentLane++;
+            }
+            if ((e.key === 'ArrowUp' || e.key === 'w' || e.key === ' ') && !isJumping) {
+                playerJumpV = 14;
+                isJumping = true;
+            }
+        });
+
+        // --- MATHEMATICAL PROJECTION TOOL ---
+        // Converts a flat depth variable (0 to 1) into 3D camera coordinates
+        function project3D(lane, zDepth) {
+            // Calculate scale change based on distance from the horizon
+            let scale = Math.pow(zDepth, 2); 
+            
+            // Map lanes (-1, 0, 1) across the widening plane
+            let laneOffset = (lane - 1) * 160;
+            
+            let screenX = (WIDTH / 2) + (laneOffset * scale);
+            let screenY = VANISHING_Y + ((HEIGHT - VANISHING_Y) * zDepth);
+            let size = 90 * scale;
+
+            return { x: screenX, y: screenY, size: size };
+        }
+
+        // --- SPAWN MANAGER ---
+        function spawnObstacle() {
+            if (isGameOver) return;
+            obstacles.push({
+                lane: Math.floor(Math.random() * 3),
+                z: 0.05, // Starts far back at the horizon
+                color: Math.random() > 0.5 ? '#ff0055' : '#ffcc00'
+            });
+            
+            // Schedule next drop
+            setTimeout(spawnObstacle, Math.max(700, 2000 - gameSpeed * 150));
+        }
+
+        // --- CORE REFRESH LOOP ---
+        function update() {
+            if (isGameOver) return;
+
+            score += 1;
+            gameSpeed = 4 + (score / 1200); // Gradual pickup
+            environmentStep = (environmentStep + gameSpeed) % 40;
+
+            document.getElementById('score').innerText = Math.floor(score / 10);
+            document.getElementById('speed').innerText = gameSpeed.toFixed(1) + 'x';
+
+            // 1. Player Side-to-Side Interpolation (Smooth Lane Swaps)
+            let centerLaneTarget = WIDTH / 2 + (currentLane - 1) * 110;
+            playerX += (centerLaneTarget - playerX) * 0.25;
+
+            // 2. Jump Physics Engine
+            if (isJumping) {
+                playerY += playerJumpV;
+                playerJumpV -= 0.8; // Gravity drop
+                if (playerY <= 0) {
+                    playerY = 0;
+                    isJumping = false;
+                }
+            }
+
+            // 3. Move Obstacles forward
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                let obs = obstacles[i];
+                obs.z += (gameSpeed * 0.0015); // Move forward along Z axis
+
+                // Calculate current screen coordinates for this frame
+                let p = project3D(obs.lane, obs.z);
+
+                // Collision Window check (Triggered when item hits near plane)
+                if (obs.z >= 0.78 && obs.z <= 0.92) {
+                    if (obs.lane === currentLane && playerY < p.size * 0.8) {
+                        isGameOver = true;
+                        gameOverScreen.classList.add('active');
+                    }
+                }
+
+                // Delete objects that clear past view window
+                if (obs.z > 1.1) {
+                    obstacles.splice(i, 1);
+                }
+            }
+        }
+
+        function render() {
+            // Clear Frame Buffer
+            ctx.clearRect(0, 0, WIDTH, HEIGHT);
+
+            // 1. Draw Horizon/Skyline Block
+            ctx.fillStyle = '#111126';
+            ctx.fillRect(0, 0, WIDTH, HORIZON_Y);
+
+            // 2. Draw 3D Ground Track Lines
+            ctx.strokeStyle = '#2d2d44';
+            ctx.lineWidth = 3;
+            
+            let laneDividers = [-1.5, -0.5, 0.5, 1.5];
+            laneDividers.forEach(ld => {
+                let pStart = project3D(ld + 1, 0);
+                let pEnd = project3D(ld + 1, 1);
+                ctx.beginPath();
+                ctx.moveTo(pStart.x, VANISHING_Y);
+                ctx.lineTo(pEnd.x, HEIGHT);
+                ctx.stroke();
+            });
+
+            // 3. Draw Moving Ground Railroad Sleepers (Gives illusion of speed)
+            ctx.fillStyle = '#1b1b2f';
+            for (let z = 0.05; z < 1; z += 0.08) {
+                let dynamicZ = z + (environmentStep * 0.002);
+                if (dynamicZ > 1) dynamicZ -= 0.95;
+
+                let leftBound = project3D(0, dynamicZ);
+                let rightBound = project3D(2, dynamicZ);
+                
+                ctx.fillRect(leftBound.x - leftBound.size, leftBound.y, (rightBound.x - leftBound.x) + rightBound.size * 2, 4 * dynamicZ);
+            }
+
+            // 4. Draw Incoming 3D Obstacles
+            // Sort by depth so items furthest away print behind closer boxes
+            obstacles.sort((a, b) => a.z - b.z);
+            obstacles.forEach(obs => {
+                let p = project3D(obs.lane, obs.z);
+                
+                // Shadow underneath box
+                ctx.fillStyle = 'rgba(0,0,0,0.4)';
+                ctx.beginPath();
+                ctx.ellipse(p.x, p.y, p.size * 0.7, p.size * 0.2, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Front Facing Barrier Plate
+                ctx.fillStyle = obs.color;
+                ctx.fillRect(p.x - p.size / 2, p.y - p.size, p.size, p.size);
+
+                // Highlight border rim to add depth structural lighting
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = Math.max(1, p.size * 0.05);
+                ctx.strokeRect(p.x - p.size / 2, p.y - p.size, p.size, p.size);
+            });
+
+            // 5. Render Player Character Sprite
+            let playerSize = 45;
+            let drawPlayerY = (HEIGHT - 40) - playerY;
+
+            // Player Drop Shadow
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.beginPath();
+            ctx.ellipse(playerX, HEIGHT - 35, 25, 8, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Character body (Neon Hovercar/Runner Block style)
+            ctx.fillStyle = '#00f0ff';
+            ctx.fillRect(playerX - playerSize / 2, drawPlayerY - playerSize, playerSize, playerSize);
+            
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(playerX - playerSize / 4, drawPlayerY - playerSize * 0.8, playerSize / 2, playerSize / 4);
+        }
+
+        // --- ENGINE LOOP CONFIG ---
+        function gameTick() {
+            update();
+            render();
+            requestAnimationFrame(gameTick);
+        }
+
+        function resetGame() {
+            obstacles = [];
+            score = 0;
+            gameSpeed = 4;
+            currentLane = 1;
+            playerX = WIDTH / 2;
+            playerY = 0;
+            isJumping = false;
+            isGameOver = false;
+            gameOverScreen.classList.remove('active');
+        }
+
+        // Run Initialization Routine
+        spawnObstacle();
+        gameTick();
+    </script>
+</body>
+</html>

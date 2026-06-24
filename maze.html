@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Neon Labyrinth: Procedural Maze Generator</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #0c0c14;
+            color: #e4e4e7;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        h1 {
+            color: #00f0ff;
+            margin: 5px 0;
+            font-size: 2rem;
+            text-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
+        }
+        .stats-bar {
+            display: flex;
+            gap: 30px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 15px;
+            background: #181825;
+            padding: 8px 25px;
+            border-radius: 8px;
+            border: 1px solid #27273a;
+        }
+        #score-val { color: #f59e0b; }
+        #timer-val { color: #10b981; }
+        #best-val { color: #ff0077; }
+        
+        #game-container {
+            position: relative;
+            background: #11111b;
+            border: 3px solid #27273a;
+            border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+            padding: 5px;
+        }
+        canvas {
+            display: block;
+            border-radius: 6px;
+        }
+        .btn {
+            background: #00f0ff;
+            color: #0c0c14;
+            border: none;
+            padding: 10px 24px;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: transform 0.1s, background-color 0.2s;
+        }
+        .btn:hover { background: #33f3ff; transform: scale(1.03); }
+        
+        #victory-modal {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(12, 12, 20, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            text-align: center;
+        }
+        #victory-modal.active { opacity: 1; pointer-events: auto; }
+        #victory-modal h2 { color: #10b981; font-size: 2.5rem; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+    <h1>Neon Labyrinth</h1>
+    
+    <div class="stats-bar">
+        <div>Moves: <span id="score-val">0</span></div>
+        <div>Time: <span id="timer-val">0.0s</span></div>
+        <div>🏆 Best: <span id="best-val">--</span></div>
+    </div>
+
+    <div id="game-container">
+        <canvas id="mazeCanvas"></canvas>
+        
+        <div id="victory-modal">
+            <h2>MAZE ESCAPED!</h2>
+            <p id="victory-stats">Final Stats</p>
+            <button class="btn" onclick="initNewGame()">Play Again</button>
+        </div>
+    </div>
+
+    <button class="btn" onclick="initNewGame()">🔄 New Maze</button>
+
+    <script>
+        const canvas = document.getElementById('mazeCanvas');
+        const ctx = canvas.getContext('2d');
+        const victoryModal = document.getElementById('victory-modal');
+
+        // --- MAZE SYSTEM CONFIG ---
+        const CELL_SIZE = 25;  
+        const COLS = 21;       
+        const ROWS = 21;
+        
+        canvas.width = COLS * CELL_SIZE;
+        canvas.height = ROWS * CELL_SIZE;
+
+        let grid = [];
+        let player = { x: 0, y: 0 };
+        let goal = { x: COLS - 1, y: ROWS - 1 };
+        
+        let moveCount = 0;
+        let startTime = null;
+        let timerInterval = null;
+        let gameActive = false;
+
+        // Load saved personal record from the browser on start
+        let bestTime = localStorage.getItem('maze_best_time') || null;
+        if (bestTime) {
+            document.getElementById('best-val').innerText = bestTime + "s";
+        }
+
+        class Cell {
+            constructor(r, c) {
+                this.r = r;
+                this.c = c;
+                this.walls = { top: true, right: true, bottom: true, left: true };
+                this.visited = false;
+            }
+        }
+
+        // --- 1. MAZE GENERATION (Depth-First Search) ---
+        function generateMaze() {
+            grid = [];
+            for (let r = 0; r < ROWS; r++) {
+                grid.push([]);
+                for (let c = 0; c < COLS; c++) {
+                    grid[r].push(new Cell(r, c));
+                }
+            }
+
+            let stack = [];
+            let current = grid[0][0];
+            current.visited = true;
+
+            while (true) {
+                let neighbors = [];
+                let { r, c } = current;
+
+                if (r > 0 && !grid[r - 1][c].visited) neighbors.push({ cell: grid[r - 1][c], wall: 'top', opp: 'bottom' });
+                if (c < COLS - 1 && !grid[r][c + 1].visited) neighbors.push({ cell: grid[r][c + 1], wall: 'right', opp: 'left' });
+                if (r < ROWS - 1 && !grid[r + 1][c].visited) neighbors.push({ cell: grid[r + 1][c], wall: 'bottom', opp: 'top' });
+                if (c > 0 && !grid[r][c - 1].visited) neighbors.push({ cell: grid[r][c - 1], wall: 'left', opp: 'right' });
+
+                if (neighbors.length > 0) {
+                    let next = neighbors[Math.floor(Math.random() * neighbors.length)];
+                    current.walls[next.wall] = false;
+                    next.cell.walls[next.opp] = false;
+
+                    next.cell.visited = true;
+                    stack.push(current);
+                    current = next.cell;
+                } else if (stack.length > 0) {
+                    current = stack.pop();
+                } else {
+                    break;
+                }
+            }
+        }
+
+        // --- 2. CONTROLS ---
+        window.addEventListener('keydown', (e) => {
+            if (!gameActive) return;
+
+            let currentCell = grid[player.y][player.x];
+            let moved = false;
+
+            if ((e.key === 'ArrowUp' || e.key === 'w') && !currentCell.walls.top) { player.y--; moved = true; }
+            if ((e.key === 'ArrowRight' || e.key === 'd') && !currentCell.walls.right) { player.x++; moved = true; }
+            if ((e.key === 'ArrowDown' || e.key === 's') && !currentCell.walls.bottom) { player.y++; moved = true; }
+            if ((e.key === 'ArrowLeft' || e.key === 'a') && !currentCell.walls.left) { player.x--; moved = true; }
+
+            if (moved) {
+                moveCount++;
+                document.getElementById('score-val').innerText = moveCount;
+                draw();
+                checkWinCondition();
+            }
+        });
+
+        // --- 3. RENDERING ENGINE ---
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    let cell = grid[r][c];
+                    let x = c * CELL_SIZE;
+                    let y = r * CELL_SIZE;
+
+                    ctx.strokeStyle = '#3b3b54';
+                    ctx.lineWidth = 2;
+
+                    if (cell.walls.top) { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + CELL_SIZE, y); ctx.stroke(); }
+                    if (cell.walls.right) { ctx.beginPath(); ctx.moveTo(x + CELL_SIZE, y); ctx.lineTo(x + CELL_SIZE, y + CELL_SIZE); ctx.stroke(); }
+                    if (cell.walls.bottom) { ctx.beginPath(); ctx.moveTo(x, y + CELL_SIZE); ctx.lineTo(x + CELL_SIZE, y + CELL_SIZE); ctx.stroke(); }
+                    if (cell.walls.left) { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + CELL_SIZE); ctx.stroke(); }
+                }
+            }
+
+            // Goal Target (Pink Ring)
+            ctx.fillStyle = '#ff0077';
+            ctx.shadowBlur = 12;
+            ctx.shadowColor = '#ff0077';
+            ctx.beginPath();
+            ctx.arc((goal.x * CELL_SIZE) + CELL_SIZE/2, (goal.y * CELL_SIZE) + CELL_SIZE/2, CELL_SIZE * 0.35, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Player Node (Cyan Orb)
+            ctx.fillStyle = '#00f0ff';
+            ctx.shadowColor = '#00f0ff';
+            ctx.beginPath();
+            ctx.arc((player.x * CELL_SIZE) + CELL_SIZE/2, (player.y * CELL_SIZE) + CELL_SIZE/2, CELL_SIZE * 0.35, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.shadowBlur = 0;
+        }
+
+        // --- 4. MECHANICS & SAVE ENGINE ---
+        function checkWinCondition() {
+            if (player.x === goal.x && player.y === goal.y) {
+                gameActive = false;
+                clearInterval(timerInterval);
+                
+                let duration = parseFloat(((Date.now() - startTime) / 1000).toFixed(1));
+                let pbText = "";
+
+                // Check and save your new personal record
+                if (bestTime === null || duration < parseFloat(bestTime)) {
+                    bestTime = duration;
+                    localStorage.setItem('maze_best_time', bestTime);
+                    document.getElementById('best-val').innerText = bestTime + "s";
+                    pbText = "<br><span style='color: #f59e0b; font-weight: bold;'>⭐ NEW HIGH SCORE RECORD! ⭐</span>";
+                }
+                
+                document.getElementById('victory-stats').innerHTML = 
+                    `Completed in <b>${duration} seconds</b> taking <b>${moveCount} steps</b>!${pbText}`;
+                victoryModal.classList.add('active');
+            }
+        }
+
+        function initNewGame() {
+            victoryModal.classList.remove('active');
+            moveCount = 0;
+            document.getElementById('score-val').innerText = "0";
+            document.getElementById('timer-val').innerText = "0.0s";
+            
+            player.x = 0;
+            player.y = 0;
+
+            generateMaze();
+            draw();
+
+            clearInterval(timerInterval);
+            startTime = Date.now();
+            timerInterval = setInterval(() => {
+                let currentSecs = ((Date.now() - startTime) / 1000).toFixed(1);
+                document.getElementById('timer-val').innerText = currentSecs + "s";
+            }, 100);
+
+            gameActive = true;
+        }
+
+        window.onload = initNewGame;
+    </script>
+</body>
+</html>

@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Hamzee's Word Cipher</title>
+    <style>
+        body {
+            background-color: #0f0f11;
+            color: #e4e4e7;
+            font-family: 'Segoe UI', sans-serif;
+            text-align: center;
+            padding-top: 50px;
+        }
+        h1 {
+            color: #3498db;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        .game-box {
+            background-color: #18181b;
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 30px;
+            border-radius: 16px;
+            border: 1px solid #27272a;
+        }
+        .word-display {
+            font-size: 2.5rem;
+            letter-spacing: 8px;
+            margin: 20px 0;
+            font-family: monospace;
+            color: #ffffff;
+        }
+        .hint-text {
+            color: #a1a1aa;
+            font-style: italic;
+            margin-bottom: 20px;
+        }
+        input {
+            background-color: #0f0f11;
+            border: 2px solid #27272a;
+            color: white;
+            padding: 10px;
+            font-size: 1.2rem;
+            border-radius: 6px;
+            text-align: center;
+            text-transform: uppercase;
+            width: 60px;
+            margin-right: 10px;
+        }
+        input:focus {
+            border-color: #3498db;
+            outline: none;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 11px 20px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        button:hover { background-color: #2980b9; }
+        
+        /* Hint Button Styling */
+        .hint-btn {
+            background-color: #f1c40f;
+            color: #000;
+            margin-top: 15px;
+            font-size: 0.9rem;
+            padding: 8px 15px;
+        }
+        .hint-btn:hover { background-color: #f39c12; }
+        .hint-btn:disabled {
+            background-color: #3f3f46;
+            color: #71717a;
+            cursor: not-allowed;
+        }
+
+        .message {
+            margin-top: 20px;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+        .lives { color: #e74c3c; font-size: 1.1rem; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+    <div class="game-box">
+        <h1>Word Cipher</h1>
+        <p class="hint-text">Category: <span id="category">...</span></p>
+        
+        <div class="word-display" id="word-space">_ _ _ _</div>
+        
+        <div class="lives">❤️ Lives Left: <span id="lives-count">6</span></div>
+
+        <div style="margin-top: 30px;">
+            <input type="text" id="letter-input" maxlength="1">
+            <button onclick="guessLetter()">Guess</button>
+        </div>
+
+        <button class="hint-btn" id="hint-action-btn" onclick="buyHint()">💡 Reveal Borders (Costs 2 Lives)</button>
+
+        <div class="message" id="msg"></div>
+    </div>
+
+    <script>
+        const wordsBank = [
+            { word: "JAVASCRIPT", hint: "The language running this game" },
+            { word: "PYTHON", hint: "Famous for its snake name and clean code" },
+            { word: "DATABASE", hint: "Where structured files and data live" },
+            { word: "MONITOR", hint: "The screen you are looking at right now" },
+            { word: "ASTRONAUT", hint: "Someone who travels into outer space" },
+            { word: "PIZZA", hint: "A round, baked Italian dish with cheese and toppings" },
+            { word: "GUITAR", hint: "A musical instrument with six strings" },
+            { word: "VOLCANO", hint: "A mountain that erupts with lava" },
+            { word: "BICYCLE", hint: "A two-wheeled vehicle you pedal yourself" },
+            { word: "DICK", hint: "the shi i used to crack your mama last night"},
+            { word: "KEYBOARD", hint: "The primary tool used to write code" },
+            { word: "INTERNET", hint: "A global network connecting computers worldwide" },
+            { word: "ROBOT", hint: "A programmable machine capable of carrying out actions" },
+            { word: "BURGER", hint: "Grilled patty served inside a sliced bun" },
+            { word: "CHOCOLATE", hint: "A sweet, usually brown food made from cacao seeds" },
+            { word: "TACO", hint: "A folded tortilla filled with seasoned meat and cheese" },
+            { word: "GALAXY", hint: "A massive system of millions or billions of stars" },
+            { word: "LIGHTNING", hint: "A powerful flash of electricity in the sky" },
+            { word: "OCEAN", hint: "A massive body of saltwater covering most of the Earth" },
+            { word: "CONTROLLER", hint: "A handheld device used to play console games" },
+            { word: "JOYSTICK", hint: "An upright lever used to control arcade machines or flight sims" },
+            { word: "HEADSET", hint: "An audio accessory combining headphones and a microphone" },
+            { word: "BACKPACK", hint: "A pack used to carry books and gear on your shoulders" },
+            { word: "SUBMARINE", hint: "A watercraft capable of independent operation underwater" },
+            { word: "UMBRELLA", hint: "A tool used to keep you dry during rainstorms" },
+            { word: "HAMZAH", hint: "the most handsome, etheral, majestic, sweet human you know"}
+        ];
+
+        let chosenPuzzle = wordsBank[Math.floor(Math.random() * wordsBank.length)];
+        let targetWord = chosenPuzzle.word;
+        let currentHint = chosenPuzzle.hint;
+        
+        let guessedLetters = [];
+        let lives = 6;
+        let hintUsed = false;
+
+        function initGame() {
+            document.getElementById("category").innerText = currentHint;
+            displayWord();
+        }
+
+        function displayWord() {
+            let trackingString = "";
+            let won = true;
+
+            for (let i = 0; i < targetWord.length; i++) {
+                let letter = targetWord[i];
+                if (guessedLetters.includes(letter)) {
+                    trackingString += letter + " ";
+                } else {
+                    trackingString += "_ ";
+                    won = false;
+                }
+            }
+
+            document.getElementById("word-space").innerText = trackingString;
+
+            if (won) {
+                document.getElementById("msg").style.color = "#2ecc71";
+                document.getElementById("msg").innerText = "🎉 You cracked the code!";
+                document.getElementById("hint-action-btn").disabled = true;
+            }
+        }
+
+        function guessLetter() {
+            let inputField = document.getElementById("letter-input");
+            let letter = inputField.value.toUpperCase();
+            inputField.value = ""; 
+            inputField.focus();
+
+            if (!letter || guessedLetters.includes(letter) || lives <= 0) return;
+
+            guessedLetters.push(letter);
+
+            if (!targetWord.includes(letter)) {
+                lives--;
+                document.getElementById("lives-count").innerText = lives;
+            }
+
+            displayWord();
+            checkLoss();
+        }
+
+        // --- NEW HINT REVEAL LOGIC ---
+        function buyHint() {
+            // Player needs more than 2 lives to use it so they don't instantly die
+            if (lives > 2 && !hintUsed) {
+                lives -= 2;
+                hintUsed = true;
+                
+                document.getElementById("lives-count").innerText = lives;
+                document.getElementById("hint-action-btn").disabled = true;
+                document.getElementById("hint-action-btn").innerText = "💡 Hint Dispatched";
+
+                // Grab the very first and very last letters of the target word
+                let firstLetter = targetWord[0];
+                let lastLetter = targetWord[targetWord.length - 1];
+
+                // Push them into the system guessed array automatically
+                if (!guessedLetters.includes(firstLetter)) guessedLetters.push(firstLetter);
+                if (!guessedLetters.includes(lastLetter)) guessedLetters.push(lastLetter);
+
+                displayWord();
+                checkLoss();
+            }
+        }
+
+        function checkLoss() {
+            if (lives <= 0) {
+                document.getElementById("msg").style.color = "#e74c3c";
+                document.getElementById("msg").innerText = "💀 System Overload! The word was: " + targetWord;
+                document.getElementById("hint-action-btn").disabled = true;
+            }
+            // Disable hint button if lives drop too low normally
+            if (lives <= 2 && !hintUsed) {
+                document.getElementById("hint-action-btn").disabled = true;
+            }
+        }
+
+        initGame();
+    </script>
+</body>
+</html>

@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Hamzee's 3D Horizon Dash</title>
+    <style>
+        body {
+            background-color: #0b0b0f;
+            color: #e4e4e7;
+            font-family: 'Segoe UI', sans-serif;
+            text-align: center;
+            padding-top: 30px;
+            margin: 0;
+            overflow: hidden;
+        }
+        h1 { 
+            color: #f43f5e; 
+            margin-bottom: 5px;
+            text-shadow: 0 0 12px rgba(244, 63, 94, 0.4);
+        }
+        .score-board {
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            font-weight: bold;
+            color: #a1a1aa;
+        }
+        #gameCanvas {
+            background-color: #020205;
+            border: 2px solid #f43f5e;
+            border-radius: 12px;
+            display: block;
+            margin: 0 auto;
+            box-shadow: 0 0 30px rgba(244, 63, 94, 0.15);
+        }
+        .controls-hint {
+            color: #71717a;
+            margin-top: 15px;
+            font-size: 0.95rem;
+        }
+        b { color: #f43f5e; }
+    </style>
+</head>
+<body>
+
+    <h1>HAMZEE'S HORIZON 3D</h1>
+    <div class="score-board">
+        Score: <span id="current-score" style="color: #38bdf8;">0</span> | 🏆 Best: <span id="high-score" style="color: #6ee7b7;">0</span>
+    </div>
+
+    <canvas id="gameCanvas" width="700" height="400"></canvas>
+    
+    <div class="controls-hint">Use <b>LEFT / RIGHT ARROW KEYS</b> or <b>A / D</b> to switch lanes</div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        let score = 0;
+        let highScore = localStorage.getItem("runner3d_highscore") ? parseInt(localStorage.getItem("runner3d_highscore")) : 0;
+        let gameActive = true;
+        let gameSpeed = 0.04; 
+
+        // Player Lane Tracking: 0 = Left, 1 = Center, 2 = Right
+        let currentLane = 1; 
+        let targetX = 350; // Canvas center
+        let playerX = 350;
+
+        let obstacles = [];
+        let spawnTimer = 0;
+        let horizonY = 150; // The point where everything scales down to zero
+
+        function spawnObstacle() {
+            let laneIndex = Math.floor(Math.random() * 3); // Randomly choose lane 0, 1, or 2
+            obstacles.push({
+                lane: laneIndex,
+                z: 1.0, // Z represents depth distance (1.0 is far horizon, 0.0 is hitting the player camera)
+                color: laneIndex === 0 ? "#ec4899" : (laneIndex === 1 ? "#3b82f6" : "#10b981")
+            });
+        }
+
+        // Capture Inputs
+        window.addEventListener("keydown", (e) => {
+            if (!gameActive) {
+                resetGame();
+                return;
+            }
+            if (e.key === "ArrowLeft" || e.key.toLowerCase() === "a") {
+                if (currentLane > 0) currentLane--;
+            }
+            if (e.key === "ArrowRight" || e.key.toLowerCase() === "d") {
+                if (currentLane < 2) currentLane++;
+            }
+        });
+
+        function resetGame() {
+            score = 0; gameSpeed = 0.04; obstacles = []; currentLane = 1; playerX = 350; gameActive = true;
+            document.getElementById("current-score").innerText = score;
+            animate();
+        }
+
+        function update() {
+            // Smoothly slide player coordinates toward their target lane center
+            let lanePositions = [180, 350, 520];
+            targetX = lanePositions[currentLane];
+            playerX += (targetX - playerX) * 0.25;
+
+            spawnTimer++;
+            if (spawnTimer > Math.max(25, 60 - gameSpeed * 400)) {
+                spawnObstacle();
+                spawnTimer = 0;
+            }
+
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                // Advance the obstacle down the Z dimension closer to screen viewport
+                obstacles[i].z -= gameSpeed;
+
+                // Collision Window Check: Obstacle reaches player depth space (z <= 0.15)
+                if (obstacles[i].z <= 0.15 && obstacles[i].z > 0.02) {
+                    if (obstacles[i].lane === currentLane) {
+                        // Crash Impact detected!
+                        gameActive = false;
+                        if (score > highScore) {
+                            highScore = score;
+                            localStorage.setItem("runner3d_highscore", highScore);
+                            document.getElementById("high-score").innerText = highScore;
+                        }
+                    }
+                }
+
+                // If obstacle flies past the camera space cleanly
+                if (obstacles[i].z <= 0) {
+                    obstacles.splice(i, 1);
+                    score++;
+                    document.getElementById("current-score").innerText = score;
+                    gameSpeed += 0.0015; // Accelerate perspective zoom speed
+                }
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Sky Matrix
+            ctx.fillStyle = "#0c0a0f";
+            ctx.fillRect(0, 0, canvas.width, horizonY);
+
+            // Draw 3D Grid floor boundary lines coming out from horizon center
+            ctx.strokeStyle = "#27272a";
+            ctx.lineWidth = 2;
+            let groundLines = [0, 235, 465, canvas.width];
+            for (let xPos of groundLines) {
+                ctx.beginPath();
+                ctx.moveTo(350, horizonY); // All lines anchor at the center horizon vanishing point
+                ctx.lineTo(xPos, canvas.height);
+                ctx.stroke();
+            }
+
+            // Draw Dynamic 3D Perspective Obstacles
+            // Loop backwards so elements furthest down the field render underneath the close ones
+            for (let obs of obstacles) {
+                // Perspective projection calculation formulas
+                let scale = 1.0 - obs.z; // Scale expands outward as z drops toward 0
+                if (scale < 0) scale = 0;
+
+                // Calculate width and height based on perspective projection scale factor
+                let obsW = 20 + scale * 90;
+                let obsH = 15 + scale * 55;
+
+                // Calculate X layout positions relative to vanishing perspective point
+                let targetXBase = 0;
+                if (obs.lane === 0) targetXBase = 115 + (1.0 - obs.z) * -160; 
+                if (obs.lane === 1) targetXBase = 350; 
+                if (obs.lane === 2) targetXBase = 585 + (1.0 - obs.z) * 160;
+
+                let drawX = targetXBase - obsW / 2;
+                let drawY = horizonY + (1.0 - obs.z) * (canvas.height - horizonY) - obsH;
+
+                // Render obstacle box with depth-based glow shadows
+                ctx.fillStyle = obs.color;
+                ctx.shadowColor = obs.color;
+                ctx.shadowBlur = 5 + scale * 15;
+                ctx.fillRect(drawX, drawY, obsW, obsH);
+                
+                // Draw internal grid detail
+                ctx.fillStyle = "rgba(255,255,255,0.4)";
+                ctx.fillRect(drawX + obsW*0.25, drawY, obsW*0.5, obsH);
+            }
+
+            // Reset glow before drawing UI text elements
+            ctx.shadowBlur = 0;
+
+            // Draw Player Marker (Bottom Screen Lane position)
+            ctx.fillStyle = "#ffffff";
+            ctx.shadowColor = "#38bdf8";
+            ctx.shadowBlur = 20;
+            ctx.beginPath();
+            ctx.arc(playerX, canvas.height - 50, 20, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Inner styling core
+            ctx.fillStyle = "#38bdf8";
+            ctx.beginPath();
+            ctx.arc(playerX, canvas.height - 50, 10, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // Handle System GameOver screen
+            if (!gameActive) {
+                ctx.fillStyle = "rgba(4, 2, 8, 0.9)";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                ctx.fillStyle = "#f43f5e";
+                ctx.font = "bold 2.5rem 'Segoe UI', sans-serif";
+                ctx.fillText("COLLISION IMPACT!", canvas.width / 2 - 170, canvas.height / 2 - 10);
+
+                ctx.fillStyle = "#a1a1aa";
+                ctx.font = "1.1rem sans-serif";
+                ctx.fillText("Press any key to clear systems and reboot", canvas.width / 2 - 165, canvas.height / 2 + 30);
+            }
+        }
+
+        function animate() {
+            if (!gameActive) return;
+            update();
+            draw();
+            requestAnimationFrame(animate);
+        }
+
+        document.getElementById("high-score").innerText = highScore;
+        animate();
+    </script>
+</body>
+</html>

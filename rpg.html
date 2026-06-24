@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Hamzee's Quest: Creature Arena Edition</title>
+    <style>
+        body {
+            background-color: #0f0f11;
+            color: #e4e4e7;
+            font-family: 'Segoe UI', sans-serif;
+            text-align: center;
+            padding-top: 15px;
+            margin: 0;
+        }
+        h1 { color: #e74c3c; font-size: 2rem; margin-bottom: 5px; }
+        
+        .game-container {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 10px;
+        }
+        
+        .panel {
+            background-color: #18181b;
+            border: 1px solid #27272a;
+            border-radius: 12px;
+            padding: 15px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 2D Battle Stage - Dark Arena Grid */
+        .battle-stage {
+            width: 100%;
+            height: 250px;
+            background-color: #111116;
+            background-image: linear-gradient(#1e1e24 1px, transparent 1px),
+                              linear-gradient(90deg, #1e1e24 1px, transparent 1px);
+            background-size: 20px 20px;
+            border-radius: 8px;
+            border: 1px solid #3f3f46;
+            margin-bottom: 10px;
+            position: relative;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        /* Emoji Sprite Layout */
+        .sprite {
+            font-size: 5rem;
+            user-select: none;
+            transition: transform 0.1s ease;
+            display: inline-block;
+        }
+
+        .boss-sprite {
+            font-size: 7.5rem;
+        }
+
+        /* Combat Animation States */
+        .lunge { transform: translateX(40px) scale(1.1); }
+        .hurt { animation: shake 0.2s ease-in-out, flashRed 0.2s ease-in-out; }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
+
+        @keyframes flashRed {
+            0%, 100% { filter: brightness(1); }
+            50% { filter: brightness(0.5) sepia(1) hue-rotate(-50deg) saturate(5); }
+        }
+
+        .hp-bar {
+            background-color: #3f3f46;
+            border-radius: 4px;
+            height: 14px;
+            width: 100%;
+            margin: 8px 0;
+            overflow: hidden;
+            display: block;
+        }
+        .hp-fill { background-color: #2ecc71; height: 100%; width: 100%; display: block; }
+        .hp-fill.monster-hp-fill { background-color: #e74c3c; }
+
+        .btn {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            padding: 10px 12px;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px 0;
+            width: 100%;
+            transition: background-color 0.2s;
+        }
+        .btn:hover { filter: brightness(1.1); }
+        .btn-heal { background-color: #2ecc71; }
+        .btn-shop { background-color: #a855f7; font-size: 0.8rem; text-align: left; padding: 8px; }
+
+        .log-box {
+            background-color: #0f0f11;
+            border: 1px solid #27272a;
+            border-radius: 8px;
+            padding: 12px;
+            margin: 15px auto;
+            max-width: 1180px;
+            height: 90px;
+            overflow-y: auto;
+            text-align: left;
+            font-family: monospace;
+            font-size: 0.85rem;
+        }
+        .inventory-list {
+            font-size: 0.85rem;
+            color: #a1a1aa;
+            text-align: left;
+            background: #0f0f11;
+            padding: 8px;
+            border-radius: 6px;
+            margin-top: 8px;
+            line-height: 1.4;
+        }
+        
+        /* Codex Grid */
+        .codex-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+            margin-top: 8px;
+        }
+        .codex-tab {
+            background: #27272a; color: #e4e4e7; border: 1px solid #3f3f46;
+            padding: 6px; font-size: 0.75rem; border-radius: 4px; cursor: pointer;
+        }
+        .codex-tab:hover { background: #3f3f46; }
+        #codex-display {
+            background: #0f0f11;
+            border: 1px solid #27272a;
+            border-radius: 6px;
+            padding: 10px;
+            margin-top: 8px;
+            font-size: 0.8rem;
+            text-align: left;
+            color: #f43f5e;
+            min-height: 65px;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Hamzee's Quest: Creature Arena Edition</h1>
+
+    <div class="game-container">
+        <div class="panel">
+            <h3>🛡️ <span id="hero-race">Human</span> Hero (Lv. <span id="hero-lvl">1</span>)</h3>
+            <p>HP: <span id="hero-hp">50</span>/<span id="hero-max-hp">50</span></p>
+            <div class="hp-bar"><div class="hp-fill" id="hero-hp-bar"></div></div>
+            <p>⚔️ ATK: <span id="hero-atk">10</span> (+<span id="bonus-atk">0</span>) | 🛡️ DEF: <span id="hero-def">0</span>%</p>
+            <p>💰 Gold: <span id="hero-gold">0</span> | ❤️ Lifesteal: <span id="hero-lifesteal">0</span></p>
+            <p style="color: #a855f7; font-size: 0.85rem;" id="race-trait-display">No buffs</p>
+            
+            <div class="inventory-list">
+                <b>🎒 Bag Items:</b><br>
+                🟢 Slime Orbs: <span id="mat-slime">0</span> | ⚙️ Goblin Iron: <span id="mat-iron">0</span><br>
+                🔥 Orc Cores: <span id="mat-core">0</span> | 💎 Dragon Shards: <span id="mat-shard">0</span><br>
+                💩 Monster Poop: <span id="mat-poop">0</span> | ✨ Fool's Gold: <span id="mat-fools">0</span><br>
+                <span style="color: #f43f5e; font-weight: bold;">🌀 Race Rerolls: <span id="mat-rerolls">0</span></span>
+            </div>
+            <button class="codex-tab" style="margin-top:8px; width:100%; background:#a855f7; color:white; font-weight:bold;" onclick="triggerReroll()">🎲 Use Race Reroll Token</button>
+        </div>
+
+        <div class="panel" style="flex: 1.5;">
+            <h3 id="enemy-title-box">👹 <span id="enemy-name">Wild Goblin</span></h3>
+            
+            <div class="battle-stage">
+                <span id="hero-sprite" class="sprite">🧑‍🛡️</span>
+                <span id="enemy-sprite" class="sprite">🧌</span>
+            </div>
+
+            <p>HP: <span id="enemy-hp">30</span>/<span id="enemy-max-hp">30</span></p>
+            <div class="hp-bar"><div class="hp-fill monster-hp-fill" id="enemy-hp-bar"></div></div>
+            <p style="font-size:0.85rem; color:#a1a1aa;">Kills until Boss: <span id="boss-countdown">5</span></p>
+            
+            <div style="display:flex; gap:10px;">
+                <button class="btn" onclick="attackEnemy()">⚔️ Attack</button>
+                <button class="btn btn-heal" onclick="healHero()">🧪 Potion [10g]</button>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h3>⚒️ Forge & Index</h3>
+            <button class="btn btn-shop" onclick="craftItem('weapon')">
+                <b>🗡️ Forge Excalibur</b><br><span id="req-weapon" style="font-size:0.75rem; color:#c084fc;">...</span>
+            </button>
+            <button class="btn btn-shop" onclick="craftItem('armor')">
+                <b>🛡️ Reinforce Armor</b><br><span id="req-armor" style="font-size:0.75rem; color:#c084fc;">...</span>
+            </button>
+            <button class="btn btn-shop" onclick="craftItem('relic')">
+                <b>🔮 Awaken Vampire Relic</b><br><span id="req-relic" style="font-size:0.75rem; color:#c084fc;">...</span>
+            </button>
+
+            <div class="codex-grid">
+                <button class="codex-tab" onclick="showIndex('slime')">🟢 Slime</button>
+                <button class="codex-tab" onclick="showIndex('iron')">⚙️ Iron</button>
+                <button class="codex-tab" onclick="showIndex('core')">🔥 Core</button>
+                <button class="codex-tab" onclick="showIndex('shard')">💎 Shard</button>
+                <button class="codex-tab" onclick="showIndex('poop')">💩 Poop</button>
+                <button class="codex-tab" onclick="showIndex('fools')">✨ Gold</button>
+            </div>
+            <div id="codex-display">Click any index item above to view its stats and hidden drop rates!</div>
+        </div>
+    </div>
+
+    <div class="log-box" id="combat-log">
+        <p style="color: #a1a1aa;">&gt; Forge and inventory databases synced successfully with the emoji engine.</p>
+    </div>
+
+    <script>
+        let hero = { 
+            lvl: 1, hp: 50, maxHp: 50, atk: 10, gold: 0, xp: 0, 
+            weaponLvl: 0, armorLvl: 0, relicLvl: 0,
+            bonusAtk: 0, def: 0, lifesteal: 0,
+            mats: { slime: 0, iron: 0, core: 0, shard: 0, fools: 0, poop: 0, rerolls: 1 }, 
+            killCount: 0, race: "Human"
+        };
+        
+        const monsterTypes = [
+            { name: "Slime Core", baseHp: 18, baseAtk: 3, goldMin: 5, goldMax: 10, drop: "slime", img: "🟢" },
+            { name: "Wild Goblin", baseHp: 30, baseAtk: 5, goldMin: 10, goldMax: 18, drop: "iron", img: "🧌" },
+            { name: "Shadow Orc", baseHp: 45, baseAtk: 8, goldMin: 18, goldMax: 30, drop: "core", img: "👹" }
+        ];
+
+        const itemIndexDb = {
+            slime: "<b>🟢 [Slime Orb]</b><br>• Source: Slime Core Enemies<br>• Drop Rate: 65% on Kill<br>• Value: 5 Gold<br>• Use: Reinforces Plate Armor defenses.",
+            iron: "<b>⚙️ [Goblin Iron]</b><br>• Source: Wild Goblin Enemies<br>• Drop Rate: 60% on Kill<br>• Value: 8 Gold<br>• Use: Upgrades Excalibur flat attack powers.",
+            core: "<b>🔥 [Orc Core]</b><br>• Source: Shadow Orc Enemies<br>• Drop Rate: 55% on Kill<br>• Value: 15 Gold<br>• Use: Awakens latent powers in your Relic.",
+            shard: "<b>💎 [Dragon Shard]</b><br>• Source: Tyrant Dragon Boss Fight<br>• Drop Rate: 100% (Guaranteed 2x on Boss Kill)<br>• Value: 50 Gold<br>• Use: High tier masterwork upgrades.",
+            poop: "<b>💩 [Monster Poop]</b><br>• Source: Environmental Hazard on standard kills<br>• Drop Rate: 25% global chance<br>• Value: 1 Gold<br>• Use: Smelly placeholder junk item.",
+            fools: "<b>✨ [Fool's Gold]</b><br>• Source: Rare lucky passive drop<br>• Drop Rate: 15% global chance<br>• Value: 20 Gold<br>• Use: High value material meant for trading shops."
+        };
+
+        const raceSprites = {
+            "Human": "🧑‍🛡️", "Elf": "🧝", "Orc": "🐗", "Angel": "😇", "Devil": "😈"
+        };
+
+        let activeEnemy = {};
+
+        function loadRpg() {
+            if (localStorage.getItem("rpg_hero_full_arena")) {
+                hero = JSON.parse(localStorage.getItem("rpg_hero_full_arena"));
+                if(!hero.mats) hero.mats = { slime: 0, iron: 0, core: 0, shard: 0, fools: 0, poop: 0, rerolls: 1 };
+                if(hero.mats.poop === undefined) hero.mats.poop = 0;
+                if(hero.mats.fools === undefined) hero.mats.fools = 0;
+            }
+            spawnEnemy();
+            updateUi();
+        }
+
+        function saveRpg() {
+            localStorage.setItem("rpg_hero_full_arena", JSON.stringify(hero));
+        }
+
+        function showIndex(itemKey) {
+            document.getElementById("codex-display").innerHTML = itemIndexDb[itemKey] || "Unknown item ID.";
+        }
+
+        function triggerReroll() {
+            if (hero.mats.rerolls <= 0) {
+                logText("❌ Missing [Race Reroll Token]!", "#e74c3c");
+                return;
+            }
+            hero.mats.rerolls--;
+            let roll = Math.floor(Math.random() * 100);
+            let oldRace = hero.race;
+
+            if (roll < 40) hero.race = "Human";
+            else if (roll < 70) hero.race = "Elf";
+            else if (roll < 85) hero.race = "Orc";
+            else if (roll < 95) hero.race = "Angel";
+            else hero.race = "Devil";
+
+            logText(`🎲 REROLL: Transformed from ${oldRace} into [${hero.race}]!`, "#10b981");
+            saveRpg(); updateUi();
+        }
+
+        function spawnEnemy() {
+            let scaleFactor = 1 + (hero.lvl - 1) * 0.30;
+            let enemyImg = document.getElementById("enemy-sprite");
+
+            if (enemyImg) enemyImg.classList.remove("boss-sprite");
+
+            if (hero.killCount > 0 && hero.killCount % 5 === 0) {
+                activeEnemy = {
+                    name: "🔴 TYRANT DRAGON (BOSS)",
+                    maxHp: Math.floor(85 * scaleFactor), hp: Math.floor(85 * scaleFactor),
+                    atk: Math.floor(13 * scaleFactor), goldMin: Math.floor(60 * scaleFactor), goldMax: Math.floor(110 * scaleFactor),
+                    drop: "shard", isBoss: true, img: "🐉"
+                };
+                if (enemyImg) enemyImg.classList.add("boss-sprite");
+                logText(`&gt; 🔥 BOSS WARNING: ${activeEnemy.name} spawned!`, "#ef4444");
+            } else {
+                let blueprint = monsterTypes[Math.floor(Math.random() * monsterTypes.length)];
+                activeEnemy = {
+                    name: blueprint.name,
+                    maxHp: Math.floor(blueprint.baseHp * scaleFactor), hp: Math.floor(blueprint.baseHp * scaleFactor),
+                    atk: Math.floor(blueprint.baseAtk * scaleFactor), goldMin: Math.floor(blueprint.goldMin * scaleFactor), goldMax: Math.floor(blueprint.goldMax * scaleFactor),
+                    drop: blueprint.drop, isBoss: false, img: blueprint.img
+                };
+            }
+            if (enemyImg) enemyImg.innerText = activeEnemy.img;
+        }
+
+        function attackEnemy() {
+            const hSprite = document.getElementById("hero-sprite");
+            const eSprite = document.getElementById("enemy-sprite");
+
+            hSprite.classList.add("lunge");
+            setTimeout(() => hSprite.classList.remove("lunge"), 100);
+
+            let baseDamage = hero.atk + hero.bonusAtk;
+            let dmgMultiplier = 1.0;
+            let critChance = 0.10; 
+            let critMultiplier = 1.50; 
+
+            if (hero.race === "Elf") dmgMultiplier = 1.30;
+            if (hero.race === "Orc") dmgMultiplier = 1.50;
+            if (hero.race === "Angel") { dmgMultiplier = 1.80; critChance = 0.20; critMultiplier = 1.70; }
+            if (hero.race === "Devil") { dmgMultiplier = 2.00; critChance = 0.50; critMultiplier = 2.00; }
+
+            let calculatedDmg = Math.floor(baseDamage * dmgMultiplier * (0.90 + Math.random() * 0.3));
+            let isCrit = Math.random() < critChance;
+            if (isCrit) calculatedDmg = Math.floor(calculatedDmg * critMultiplier);
+
+            activeEnemy.hp -= calculatedDmg;
+            
+            eSprite.classList.add("hurt");
+            setTimeout(() => eSprite.classList.remove("hurt"), 200);
+
+            if (isCrit) logText(`⚡ CRITICAL SHATTER! You strike for ${calculatedDmg} damage!`, "#f59e0b");
+            else logText(`⚔️ You deal ${calculatedDmg} damage!`, "#3498db");
+
+            if (hero.lifesteal > 0 && hero.hp < hero.maxHp) {
+                hero.hp = Math.min(hero.maxHp, hero.hp + hero.lifesteal);
+            }
+
+            if (activeEnemy.hp <= 0) {
+                let goldLoot = Math.floor(Math.random() * (activeEnemy.goldMax - activeEnemy.goldMin + 1)) + activeEnemy.goldMin;
+                hero.gold += goldLoot;
+                hero.xp += activeEnemy.isBoss ? 50 : 15;
+                hero.killCount++;
+
+                let msg = `🏆 Killed! +${goldLoot} Gold.`;
+                if (activeEnemy.isBoss) { 
+                    hero.mats.shard += 2; msg += " +2x [DRAGON SHARD]!"; 
+                } else { 
+                    let rollCheck = Math.random();
+                    if (activeEnemy.drop === "slime" && rollCheck < 0.65) { hero.mats.slime++; msg += " +1x [SLIME ORB]."; }
+                    else if (activeEnemy.drop === "iron" && rollCheck < 0.60) { hero.mats.iron++; msg += " +1x [GOBLIN IRON]."; }
+                    else if (activeEnemy.drop === "core" && rollCheck < 0.55) { hero.mats.core++; msg += " +1x [ORC CORE]."; }
+                    else { msg += " (No components extracted.)"; }
+
+                    if (Math.random() < 0.25) { hero.mats.poop++; msg += " Stepped in Poop."; }
+                }
+                
+                if (Math.random() < 0.20) { hero.mats.rerolls++; msg += " 🌀 Found a Race Reroll Token!"; }
+                if (Math.random() < 0.15) { hero.mats.fools++; msg += " Found some shiny Fool's Gold!"; }
+
+                logText(msg, "#2ecc71");
+                checkLevelUp(); saveRpg(); spawnEnemy(); updateUi();
+            } else {
+                setTimeout(() => {
+                    hSprite.classList.add("hurt");
+                    setTimeout(() => hSprite.classList.remove("hurt"), 200);
+                    
+                    let rawDmg = Math.floor(activeEnemy.atk * (0.75 + Math.random() * 0.4));
+                    let reducedDmg = Math.floor(rawDmg * (1 - (hero.def / 100)));
+                    if (reducedDmg < 1) reducedDmg = 1;
+
+                    hero.hp -= reducedDmg;
+                    logText(`💥 ${activeEnemy.name} counter-strikes for ${reducedDmg} damage!`, "#e74c3c");
+
+                    if (hero.hp <= 0) {
+                        logText(`💀 Defeated! Half your wallet fell out during escape.`, "#95a5a6");
+                        hero.gold = Math.floor(hero.gold / 2); hero.hp = hero.maxHp;
+                        spawnEnemy();
+                    }
+                    saveRpg(); updateUi();
+                }, 250);
+            }
+            updateUi();
+        }
+
+        function craftItem(type) {
+            let nextLvl;
+
+            if (type === 'weapon') {
+                nextLvl = hero.weaponLvl + 1; 
+                let reqGold = 25 + (nextLvl * 15); let reqIron = nextLvl * 2; let reqShard = Math.max(0, nextLvl - 2);
+                if (hero.gold >= reqGold && hero.mats.iron >= reqIron && hero.mats.shard >= reqShard) {
+                    hero.gold -= reqGold; hero.mats.iron -= reqIron; hero.mats.shard -= reqShard;
+                    hero.weaponLvl++; hero.bonusAtk += 18;
+                    logText(`🗡️ FORGE SUCCESS! Excalibur reached Lv. ${hero.weaponLvl}!`, "#c084fc");
+                } else { logText("❌ Material missing for Excalibur forge!", "#e74c3c"); }
+            }
+
+            if (type === 'armor') {
+                nextLvl = hero.armorLvl + 1;
+                if (hero.def >= 75) { logText("🛡️ Armor maxed out!", "#f1c40f"); return; }
+                let reqGold = 20 + (nextLvl * 12); let reqSlime = nextLvl * 2; let reqIron = Math.max(0, nextLvl - 1);
+                if (hero.gold >= reqGold && hero.mats.slime >= reqSlime && hero.mats.iron >= reqIron) {
+                    hero.gold -= reqGold; hero.mats.slime -= reqSlime; hero.mats.iron -= reqIron;
+                    hero.armorLvl++; hero.def = Math.min(75, hero.def + 10);
+                    logText(`🛡️ FORGE SUCCESS! Plate Armor reached Lv. ${hero.armorLvl}!`, "#c084fc");
+                } else { logText("❌ Material missing for Armor reinforcement!", "#e74c3c"); }
+            }
+
+            if (type === 'relic') {
+                nextLvl = hero.relicLvl + 1; 
+                let reqGold = 40 + (nextLvl * 20); let reqCore = nextLvl * 2; let reqShard = nextLvl;
+                if (hero.gold >= reqGold && hero.mats.core >= reqCore && hero.mats.shard >= reqShard) {
+                    hero.gold -= reqGold; hero.mats.core -= reqCore; hero.mats.shard -= reqShard;
+                    hero.relicLvl++; hero.lifesteal += 5;
+                    logText(`🔮 AWAKENING SUCCESS! Vampire Relic reached Lv. ${hero.relicLvl}!`, "#c084fc");
+                } else { logText("❌ Material missing for Relic awakening!", "#e74c3c"); }
+            }
+
+            saveRpg(); updateUi();
+        }
+
+        function logText(text, color = "#e4e4e7") {
+            const logBox = document.getElementById("combat-log");
+            logBox.innerHTML += `<p style="color: ${color};">${text}</p>`;
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        function healHero() {
+            if (hero.gold >= 10 && hero.hp < hero.maxHp) {
+                hero.gold -= 10; hero.hp = Math.min(hero.maxHp, hero.hp + 25);
+                logText("🧪 Drank potion! Restored 25 HP.", "#2ecc71");
+                saveRpg(); updateUi();
+            }
+        }
+
+        function checkLevelUp() {
+            if (hero.xp >= hero.lvl * 35) {
+                hero.lvl++; hero.maxHp += 15; hero.hp = hero.maxHp; hero.atk += 5;
+                logText(`✨ LEVEL UP! You reached character level ${hero.lvl}!`, "#9b59b6");
+            }
+        }
+
+        function updateUi() {
+            document.getElementById("hero-lvl").innerText = hero.lvl;
+            document.getElementById("hero-hp").innerText = hero.hp;
+            document.getElementById("hero-max-hp").innerText = hero.maxHp;
+            document.getElementById("hero-atk").innerText = hero.atk;
+            document.getElementById("bonus-atk").innerText = hero.bonusAtk;
+            document.getElementById("hero-def").innerText = hero.def;
+            document.getElementById("hero-gold").innerText = hero.gold;
+            document.getElementById("hero-lifesteal").innerText = hero.lifesteal;
+            document.getElementById("hero-race").innerText = hero.race;
+            document.getElementById("hero-sprite").innerText = raceSprites[hero.race] || raceSprites["Human"];
+
+            let passiveText = "🧑 Base Human: No Multipliers (10% Base Crit)";
+            if(hero.race === "Elf") passiveText = "🧝 Elven Grace: +30% Damage (10% Crit)";
+            if(hero.race === "Orc") passiveText = "🐗 Bloodlust: +50% Damage (10% Crit)";
+            if(hero.race === "Angel") passiveText = "😇 Angel Aura: +80% Damage | 20% Crit Chance & 1.7x Crit Dmg";
+            if(hero.race === "Devil") passiveText = "😈 Devil Wrath: +100% Damage | 50% Crit Chance & 2.0x Crit Dmg";
+            document.getElementById("race-trait-display").innerText = passiveText;
+
+            document.getElementById("mat-slime").innerText = hero.mats.slime;
+            document.getElementById("mat-iron").innerText = hero.mats.iron;
+            document.getElementById("mat-core").innerText = hero.mats.core;
+            document.getElementById("mat-shard").innerText = hero.mats.shard;
+            document.getElementById("mat-poop").innerText = hero.mats.poop;
+            document.getElementById("mat-fools").innerText = hero.mats.fools;
+            document.getElementById("mat-rerolls").innerText = hero.mats.rerolls;
+
+            let nW = hero.weaponLvl + 1;
+            document.getElementById("req-weapon").innerText = `Req: ${25+(nW*15)}g, ${nW*2} Iron, ${Math.max(0, nW-2)} Shard`;
+            let nA = hero.armorLvl + 1;
+            document.getElementById("req-armor").innerText = hero.def >= 75 ? "MAX TIER" : `Req: ${20+(nA*12)}g, ${nA*2} Slime, ${Math.max(0, nA-1)} Iron`;
+            let nR = hero.relicLvl + 1;
+            document.getElementById("req-relic").innerText = `Req: ${40+(nR*20)}g, ${nR*2} Core, ${nR} Shard`;
+
+            document.getElementById("boss-countdown").innerText = 5 - (hero.killCount % 5);
+            document.getElementById("enemy-name").innerText = activeEnemy.name;
+            document.getElementById("enemy-hp").innerText = Math.max(0, activeEnemy.hp);
+            document.getElementById("enemy-max-hp").innerText = activeEnemy.maxHp;
+
+            document.getElementById("hero-hp-bar").style.width = (hero.hp / hero.maxHp * 100) + "%";
+            document.getElementById("enemy-hp-bar").style.width = (Math.max(0, activeEnemy.hp) / activeEnemy.maxHp * 100) + "%";
+        }
+
+        window.onload = loadRpg;
+    </script>
+</body>
+</html>

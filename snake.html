@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Cyberpunk Data Snake</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #05050a;
+            color: #fff;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        h1 {
+            color: #00ffcc;
+            margin: 5px 0;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 0 15px rgba(0, 255, 204, 0.4);
+        }
+        #game-container {
+            position: relative;
+            background: #09090f;
+            border: 3px solid #00ffcc;
+            border-radius: 12px;
+            box-shadow: 0 20px 50px rgba(0, 255, 204, 0.15);
+        }
+        canvas {
+            display: block;
+            border-radius: 9px;
+        }
+        .ui-layer {
+            position: absolute;
+            top: 15px;
+            width: 100%;
+            display: flex;
+            justify-content: space-around;
+            font-weight: 900;
+            pointer-events: none;
+            font-size: 1.5rem;
+        }
+        #score-display { color: #00ffcc; text-shadow: 0 2px 10px rgba(0,255,204,0.4); }
+        #high-display { color: #f59e0b; text-shadow: 0 2px 10px rgba(245,158,11,0.4); }
+        
+        #menu-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(5, 5, 10, 0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+            text-align: center;
+        }
+        #menu-overlay.hidden {
+            display: none;
+        }
+        .btn {
+            background: #00ffcc;
+            color: #05050a;
+            border: none;
+            padding: 12px 35px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 0 15px rgba(0, 255, 204, 0.4);
+            transition: transform 0.1s, background 0.2s;
+        }
+        .btn:hover { background: #33ffdd; transform: scale(1.05); }
+        #game-status { font-size: 2.2rem; color: #00ffcc; margin-bottom: 5px; font-weight: 800; }
+        #final-stats { color: #a1a1aa; margin-bottom: 20px; font-size: 1rem; }
+    </style>
+</head>
+<body>
+
+    <h1>Data Stream Injector</h1>
+    <div style="font-size: 0.9rem; color: #4b5563; margin-bottom: 10px; letter-spacing: 1px;">
+        CONTROL: [ ARROW KEYS ] OR [ WASD ] | DODGE THE RED FIREWALLS
+    </div>
+
+    <div id="game-container">
+        <div class="ui-layer">
+            <div id="score-display">Data: 0kb</div>
+            <div id="high-display">🏆 Max: 0</div>
+        </div>
+        <canvas id="snakeCanvas" width="600" height="400"></canvas>
+        
+        <div id="menu-overlay">
+            <div id="game-status">MAINFRAME HACK</div>
+            <div id="final-stats">Absorb blue data fragments. Avoid perimeter grids and red nodes.</div>
+            <button class="btn" onclick="startGame()">INITIALIZE RUN</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('snakeCanvas');
+        const ctx = canvas.getContext('2d');
+        const menuOverlay = document.getElementById('menu-overlay');
+        const scoreDisplay = document.getElementById('score-display');
+        const highDisplay = document.getElementById('high-display');
+        const gameStatus = document.getElementById('game-status');
+        const finalStats = document.getElementById('final-stats');
+
+        const GRID_SIZE = 20;
+        let snake = [];
+        let direction = 'right';
+        let nextDirection = 'right';
+        let dataNode = { x: 0, y: 0 };
+        let firewalls = [];
+        let score = 0;
+        let gameActive = false;
+        let gameLoopInterval = null;
+        let gameSpeed = 90; // Frame tick speed in ms
+
+        let maxScore = localStorage.getItem('snake_high_score') || 0;
+        highDisplay.innerText = "🏆 Max: " + maxScore;
+
+        // Vector direction listeners
+        window.addEventListener('keydown', (e) => {
+            const key = e.key.toLowerCase();
+            if ((key === 'arrowup' || key === 'w') && direction !== 'down') nextDirection = 'up';
+            if ((key === 'arrowdown' || key === 's') && direction !== 'up') nextDirection = 'down';
+            if ((key === 'arrowleft' || key === 'a') && direction !== 'right') nextDirection = 'left';
+            if ((key === 'arrowright' || key === 'd') && direction !== 'left') nextDirection = 'right';
+        });
+
+        // --- AUDIO SYNTH CORES ---
+        let audioCtx = null;
+        function initAudio() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        function playBlip(freq, type, duration) {
+            if (!audioCtx) return;
+            let osc = audioCtx.createOscillator();
+            let gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.start(); osc.stop(audioCtx.currentTime + duration);
+        }
+
+        function generateNodePosition() {
+            let valid = false;
+            while (!valid) {
+                dataNode.x = Math.floor(Math.random() * (canvas.width / GRID_SIZE)) * GRID_SIZE;
+                dataNode.y = Math.floor(Math.random() * (canvas.height / GRID_SIZE)) * GRID_SIZE;
+                
+                // Keep target items from spawning directly on the snake body
+                valid = !snake.some(segment => segment.x === dataNode.x && segment.segment === dataNode.y);
+            }
+        }
+
+        function spawnFirewall() {
+            let x = Math.floor(Math.random() * (canvas.width / GRID_SIZE)) * GRID_SIZE;
+            let y = Math.floor(Math.random() * (canvas.height / GRID_SIZE)) * GRID_SIZE;
+            
+            // Prevent spawning directly blocking target paths or players
+            let onSnake = snake.some(s => s.x === x && s.y === y);
+            let onNode = (dataNode.x === x && dataNode.y === y);
+            
+            if (!onSnake && !onNode) {
+                firewalls.push({ x, y });
+            }
+        }
+
+        // --- RUNTIME CYCLE ---
+        function update() {
+            direction = nextDirection;
+            let head = { ...snake[0] };
+
+            if (direction === 'up') head.y -= GRID_SIZE;
+            if (direction === 'down') head.y += GRID_SIZE;
+            if (direction === 'left') head.x -= GRID_SIZE;
+            if (direction === 'right') head.x += GRID_SIZE;
+
+            // Collision Check: Outer Borders
+            if (head.x < 0 || head.x >= canvas.width || head.y < 0 || head.y >= canvas.height) {
+                endGame();
+                return;
+            }
+
+            // Collision Check: Self Devourment
+            if (snake.some(segment => segment.x === head.x && segment.y === head.y)) {
+                endGame();
+                return;
+            }
+
+            // Collision Check: Static Security Red Firewalls
+            if (firewalls.some(fw => fw.x === head.x && fw.y === head.y)) {
+                endGame();
+                return;
+            }
+
+            // Append new vector head coordinate
+            snake.unshift(head);
+
+            // Check Data Absorption Node Contact
+            if (head.x === dataNode.x && head.y === dataNode.y) {
+                score += 10;
+                scoreDisplay.innerText = "Data: " + score + "kb";
+                playBlip(600, 'triangle', 0.12);
+                generateNodePosition();
+                
+                // Spawn an obstacle node node every 20 data bits digested
+                if (score % 20 === 0) {
+                    spawnFirewall();
+                }
+            } else {
+                snake.pop(); // Standard movement progression maintenance
+            }
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Tech Matrix Background Grid Layout Lines
+            ctx.strokeStyle = '#0d0d1a'; ctx.lineWidth = 1;
+            for(let i=0; i<canvas.width; i+=GRID_SIZE) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,canvas.height); ctx.stroke(); }
+            for(let j=0; j<canvas.height; j+=GRID_SIZE) { ctx.beginPath(); ctx.moveTo(0,j); ctx.lineTo(canvas.width,j); ctx.stroke(); }
+
+            // Render Static Danger Firewall Nodes
+            firewalls.forEach(fw => {
+                ctx.fillStyle = '#0a050b';
+                ctx.fillRect(fw.x + 2, fw.y + 2, GRID_SIZE - 4, GRID_SIZE - 4);
+                ctx.strokeStyle = '#ff0055'; ctx.lineWidth = 2;
+                ctx.strokeRect(fw.x + 2, fw.y + 2, GRID_SIZE - 4, GRID_SIZE - 4);
+            });
+
+            // Render Blue Target Data Cluster Piece
+            ctx.fillStyle = '#051122';
+            ctx.fillRect(dataNode.x + 2, dataNode.y + 2, GRID_SIZE - 4, GRID_SIZE - 4);
+            ctx.strokeStyle = '#00f0ff'; ctx.lineWidth = 3;
+            ctx.strokeRect(dataNode.x + 2, dataNode.y + 2, GRID_SIZE - 4, GRID_SIZE - 4);
+
+            // Render Cyber Stream Snake Body
+            snake.forEach((segment, index) => {
+                const isHead = index === 0;
+                ctx.fillStyle = isHead ? '#00ffcc' : '#006655';
+                ctx.fillRect(segment.x + 1, segment.y + 1, GRID_SIZE - 2, GRID_SIZE - 2);
+                
+                ctx.strokeStyle = isHead ? '#ffffff' : '#00ffcc';
+                ctx.lineWidth = isHead ? 2 : 1;
+                ctx.strokeRect(segment.x + 1, segment.y + 1, GRID_SIZE - 2, GRID_SIZE - 2);
+            });
+        }
+
+        function gameTick() {
+            if (!gameActive) return;
+            update();
+            render();
+        }
+
+        // --- CYCLE ENGINES MANAGEMENT ---
+        function startGame() {
+            initAudio();
+            snake = [
+                { x: GRID_SIZE * 5, y: GRID_SIZE * 5 },
+                { x: GRID_SIZE * 4, y: GRID_SIZE * 5 },
+                { x: GRID_SIZE * 3, y: GRID_SIZE * 5 }
+            ];
+            direction = 'right';
+            nextDirection = 'right';
+            score = 0;
+            firewalls = [];
+            scoreDisplay.innerText = "Data: 0kb";
+            menuOverlay.classList.add('hidden');
+            gameActive = true;
+            
+            generateNodePosition();
+            clearInterval(gameLoopInterval);
+            gameLoopInterval = setInterval(gameTick, gameSpeed);
+            playBlip(300, 'square', 0.2);
+        }
+
+        function endGame() {
+            gameActive = false;
+            clearInterval(gameLoopInterval);
+            playBlip(110, 'sawtooth', 0.4);
+
+            if (score > maxScore) {
+                maxScore = score;
+                localStorage.setItem('snake_high_score', maxScore);
+                highDisplay.innerText = "🏆 Max: " + maxScore;
+            }
+
+            gameStatus.innerText = "CONNECTION TERMINATED";
+            finalStats.innerHTML = `Data Payload Compiled: <b>${score}kb</b>`;
+            menuOverlay.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
